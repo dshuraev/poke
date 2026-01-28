@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"sort"
@@ -14,9 +15,9 @@ type EnvMap map[string]string
 type Env struct {
 	// Env variable merge strategy, must be `EnvStrategyInherit`, `EnvStrategyIsolate`,
 	// `EnvStrategyExtend`, or `EnvStrategyOverride`
-	Strategy EnvStrategy
+	Strategy EnvStrategy `yaml:"strategy,omitempty"`
 	// Map `key:val` of environmental variables provided with the command
-	Vals EnvMap
+	Vals EnvMap `yaml:"vals,omitempty"`
 }
 
 const (
@@ -31,6 +32,66 @@ func NewEnvDefault() Env {
 		Strategy: EnvStrategyIsolate,
 		Vals:     make(EnvMap),
 	}
+}
+
+// UnmarshalYAML parses env config per docs/configuration/command.md.
+// Keys and values are always interpreted as strings.
+func (env *Env) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type envAlias Env
+
+	*env = NewEnvDefault()
+
+	var in envAlias
+	if err := unmarshal(&in); err != nil {
+		return err
+	}
+
+	if in.Strategy != "" {
+		env.Strategy = in.Strategy
+	}
+	if in.Vals != nil {
+		env.Vals = in.Vals
+	}
+	return nil
+}
+
+// UnmarshalYAML converts any YAML map into string key/value pairs.
+func (env *EnvMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var raw map[interface{}]interface{}
+	if err := unmarshal(&raw); err == nil {
+		*env = mapToEnvMap(raw)
+		return nil
+	}
+
+	var rawString map[string]interface{}
+	if err := unmarshal(&rawString); err != nil {
+		return err
+	}
+
+	out := make(EnvMap, len(rawString))
+	for key, val := range rawString {
+		out[toEnvString(key)] = toEnvString(val)
+	}
+	*env = out
+	return nil
+}
+
+func mapToEnvMap(raw map[interface{}]interface{}) EnvMap {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(EnvMap, len(raw))
+	for key, val := range raw {
+		out[toEnvString(key)] = toEnvString(val)
+	}
+	return out
+}
+
+func toEnvString(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
 }
 
 func (cfg Env) Get() EnvMap {
