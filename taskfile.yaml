@@ -1,0 +1,92 @@
+version: 3
+
+vars:
+  CYCLOMATIC_THRESH: 10
+  GO_VERSION: "1.25"
+
+tasks:
+  default:
+    desc: Run all checks (lint + test + build)
+    cmds:
+      - task: lint
+      - task: test
+      - task: build
+
+  install-tools:
+    desc: Install required linting tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install honnef.co/go/tools/cmd/staticcheck@latest
+      - go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+      - go install github.com/securego/gosec/v2/cmd/gosec@latest
+    status:
+      - command -v golangci-lint
+      - command -v staticcheck
+      - command -v gocyclo
+      - command -v gosec
+
+  lint:
+    desc: Run all linters
+    deps: [install-tools]
+    cmds:
+      - echo "→ Running golangci-lint..."
+      - golangci-lint run --timeout 5m
+      - echo "→ Running staticcheck..."
+      - staticcheck ./...
+      - echo "→ Running go vet..."
+      - go vet ./...
+      - echo "→ Checking cyclomatic complexity (threshold={{.CYCLOMATIC_THRESH}})..."
+      - gocyclo -over {{.CYCLOMATIC_THRESH}} .
+      - echo "→ Running security checks..."
+      - gosec -quiet ./...
+      - echo "✅ All linters passed!"
+
+  test:
+    desc: Run tests with coverage
+    cmds:
+      - echo "→ Running tests..."
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  test-short:
+    desc: Run tests without race detector (faster)
+    cmds:
+      - go test -v ./...
+
+  build:
+    desc: Build the project
+    cmds:
+      - echo "→ Building..."
+      - go build -v ./...
+      - echo "✅ Build successful!"
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - echo "✅ Code formatted!"
+
+  tidy:
+    desc: Tidy go.mod
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  clean:
+    desc: Clean build artifacts and cache
+    cmds:
+      - go clean -cache -testcache -modcache
+      - rm -f coverage.out
+      - echo "✅ Cleaned!"
+
+  pre-commit:
+    desc: Run before committing (fmt + lint + test)
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test-short
+
+  check:
+    desc: Quick check (lint only, no tests)
+    cmds:
+      - task: lint
