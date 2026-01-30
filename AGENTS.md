@@ -1,44 +1,72 @@
 # agents.md
 
 This document defines how agents—human and automated—operate within this codebase.  
-It follows **Extreme Programming (XP)** principles (communication, simplicity, feedback, courage, respect) and adopts **Conventional Commits** for clear traceability.
+It follows **Extreme Programming (XP)** principles (communication, simplicity,
+feedback, courage, respect) and adopts **Conventional Commits** for clear traceability.
+
+## Code Generation Guidelines
+
+### Core principals
+
+- **Clarity over cleverness**: Use simple, explicit patterns. Avoid abstractions unless absolutely necessary.
+- **Minimal changes**: Make one logical change at a time. Never bundle unrelated modifications.
+- **Self-documenting code**: Choose descriptive names that explain intent without needing comments.
+
+### Before any code change
+
+1. Explain WHAT you're changing and WHY
+2. Describe the design approach and alternatives you considered
+3. List any assumptions or trade-offs
+4. Generate code only when the user confirmed the proposal
+
+### In the code itself
+
+- Add docstrings for all functions/classes explaining purpose and usage
+- Comment the "why" not the "what" - explain business logic, edge cases, non-obvious decisions
+- Document any Magic numbers or configuration values
+
+## Change Management
+
+- Make ONE conceptual change per file modification
+- If fixing a bug AND refactoring, do them separately
+- Provide a brief summary after each change explaining what's different
 
 ## Code Style
 
-- Low cyclometric complexity
+- Prefer explicit over implicit (e.g., `getUserById(id)` not `get(id)`)
+- Low cyclometric complexity: avoid nested ternaries, complex conditionals - break into named variables
+- Maximum function length: ~50 lines. If longer, explain why or refactor
 
-## Roles
+## Rationale Requirement
 
-- **Feature Agent (developer or pair):**  
-  Breaks stories into smallest testable increments. Practices TDD. Keeps work in progress minimal.
+For any non-trivial design decision, document:
 
-- **Review Agent:**  
-  Verifies Definition of Done: runnable demo, passing tests, updated docs. Requests scope reduction if PR grows.
+- Why this approach over alternatives
+- What problems it solves
+- What limitations it has
+- Any future considerations
 
-- **Maintainer Agent:**  
-  Curates backlog, merges only green builds, enforces API stability, plans refactors.
+## Review Checklist
 
-- **CI Agent (automation):**  
-  Executes linting, unit/property tests, coverage, security and license scans.
+Before presenting code, verify:
 
-- **Release Agent (automation):**  
-  Generates changelog, semantic version bump, tags, and artifact publishing after successful merge.
-
-- **Docs Agent:**  
-  Keeps guides, tutorials, and API references synchronized with implementation.
+- [ ] Can someone unfamiliar read this and understand the intent?
+- [ ] Is the design rationale documented?
+- [ ] Are changes isolated and minimal?
+- [ ] Would I understand this code in 6 months?
 
 ## Testing
 
 - All tests reside under `test/{unit,property,fuzz,integration,conformance}/`.
 - Common generators, models, and case templates live in `test/support/`.
 
-| Category        | Purpose                                                                         |
-|-----------------|---------------------------------------------------------------------------------|
-| **unit**        | Fast, deterministic, pure logic.                                                |
-| **property**    | Short property-based tests.                                                     |
-| **fuzz**        | Long-running randomized or stateful tests, usually excluded from default CI.    |
-| **integration** | Cross-module, networking, or persistence behavior.                              |
-| **conformance** | Spec and contract validation for CRDT behaviours and sync protocols.            |
+| Category        | Purpose                                                                      |
+| --------------- | ---------------------------------------------------------------------------- |
+| **unit**        | Fast, deterministic, pure logic.                                             |
+| **property**    | Short property-based tests.                                                  |
+| **fuzz**        | Long-running randomized or stateful tests, usually excluded from default CI. |
+| **integration** | Cross-module, networking, or persistence behavior.                           |
+| **conformance** | Spec and contract validation for CRDT behaviours and sync protocols.         |
 
 ## Definition of Done
 
@@ -46,32 +74,6 @@ It follows **Extreme Programming (XP)** principles (communication, simplicity, f
 - **Documentation:** README or guide reflects current design and usage.
 - **Observability:** Metrics/logging hooks instrumented where applicable.
 - **Debt:** All remaining TODOs are converted into tracked issues before merge.
-
-## Conventional Commits
-
-Format:  
-`<type>(<scope>): <message>`
-
-Common types:
-
-- `feat:` user-visible feature  
-- `fix:` bug fix  
-- `refactor:` behavior-preserving change  
-- `perf:` performance improvement  
-- `test:` test-only change  
-- `docs:` documentation change  
-- `build:` CI/build system  
-- `chore:` maintenance work  
-- `revert:` revert of previous commit  
-
-Add `BREAKING CHANGE:` footer when relevant.
-
-Examples:
-
-- `feat(sync): add digest-first handshake`
-- `fix(store-sqlite): handle WAL rotation`
-- `refactor(crdt): extract dvv context module`
-- `docs(guide): expand replay walkthrough`
 
 ## Review Policy
 
