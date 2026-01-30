@@ -74,7 +74,7 @@ Before presenting code, verify:
 - **Documentation:** README or guide reflects current design and usage.
 - **Observability:** Metrics/logging hooks instrumented where applicable.
 - **Debt:** All remaining TODOs are converted into tracked issues before merge.
-- **CI:**: All code must clear the CI checks (run `go-task`).
+- **CI:**: All code must clear the CI checks (run `fish -c go-task`).
 
 ## Review Policy
 
