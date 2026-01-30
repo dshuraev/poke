@@ -19,6 +19,7 @@ type Command struct {
 
 const defaultExecutorName = "bin"
 
+// NewCommandDefault returns a Command populated with default executor and env.
 func NewCommandDefault() Command {
 	return Command{
 		Executor: defaultExecutorName,
@@ -36,52 +37,31 @@ func NewCommandDefault() Command {
 func (cmd *Command) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	*cmd = NewCommandDefault()
 
-	// check if user provided a single string, like `current-dir: pwd`
-	var asString string
-	if err := unmarshal(&asString); err == nil {
-		cmd.Args = []string{asString}
+	args, handled, err := unmarshalCommandArgsAsString(unmarshal)
+	if err != nil {
+		return err
+	}
+	if handled {
+		cmd.Args = args
 		return nil
 	}
 
-	// check if user provided a list of arguments, like `query-fs: ['df', '-h']`
-	var asList []string
-	if err := unmarshal(&asList); err == nil {
-		cmd.Args = asList
+	args, handled, err = unmarshalCommandArgsAsList(unmarshal)
+	if err != nil {
+		return err
+	}
+	if handled {
+		cmd.Args = args
 		return nil
 	}
 
-	// fallthrough: unmarshall full spec
-	type commandAlias Command
-	var in commandAlias
-	if err := unmarshal(&in); err != nil {
+	inCmd, err := unmarshalCommandSpec(unmarshal)
+	if err != nil {
 		return err
 	}
 
-	// merge non-empty with defaults
-	inCmd := Command(in)
-	if inCmd.Name != "" {
-		cmd.Name = inCmd.Name
-	}
-	if inCmd.Description != "" {
-		cmd.Description = inCmd.Description
-	}
-	if inCmd.Executor != "" {
-		cmd.Executor = inCmd.Executor
-	}
-	if len(inCmd.Args) > 0 {
-		cmd.Args = inCmd.Args
-	}
-
-	cmd.Timeout = inCmd.Timeout
-	if inCmd.Env.Strategy != "" || len(inCmd.Env.Vals) > 0 {
-		cmd.Env = inCmd.Env
-	}
-
-	if len(cmd.Args) == 0 {
-		return fmt.Errorf("command has no arguments")
-	}
-
-	return nil
+	applyCommandOverrides(cmd, inCmd)
+	return validateCommandArgs(cmd.Args)
 }
 
 // MarshalYAML renders commands in short or object form depending on fields set.
@@ -105,21 +85,63 @@ func (cmd Command) MarshalYAML() (interface{}, error) {
 	return commandAlias(cmd), nil
 }
 
-func parseArgsValue(value interface{}) ([]string, error) {
-	switch raw := value.(type) {
-	case nil:
-		return nil, nil
-	case string:
-		return []string{raw}, nil
-	case []string:
-		return raw, nil
-	case []interface{}:
-		out := make([]string, 0, len(raw))
-		for _, item := range raw {
-			out = append(out, toEnvString(item))
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("args must be a string or list of strings")
+// unmarshalCommandArgsAsString tries the single-argument shorthand form.
+func unmarshalCommandArgsAsString(unmarshal func(interface{}) error) ([]string, bool, error) {
+	var asString string
+	if err := unmarshal(&asString); err != nil {
+		return nil, false, nil
 	}
+
+	return []string{asString}, true, nil
+}
+
+// unmarshalCommandArgsAsList tries the list-of-arguments shorthand form.
+func unmarshalCommandArgsAsList(unmarshal func(interface{}) error) ([]string, bool, error) {
+	var asList []string
+	if err := unmarshal(&asList); err != nil {
+		return nil, false, nil
+	}
+
+	return asList, true, nil
+}
+
+// unmarshalCommandSpec parses the full command specification form.
+func unmarshalCommandSpec(unmarshal func(interface{}) error) (Command, error) {
+	type commandAlias Command
+	var in commandAlias
+	if err := unmarshal(&in); err != nil {
+		return Command{}, err
+	}
+
+	return Command(in), nil
+}
+
+// applyCommandOverrides merges non-empty values from inCmd onto cmd.
+func applyCommandOverrides(cmd *Command, inCmd Command) {
+	if inCmd.Name != "" {
+		cmd.Name = inCmd.Name
+	}
+	if inCmd.Description != "" {
+		cmd.Description = inCmd.Description
+	}
+	if inCmd.Executor != "" {
+		cmd.Executor = inCmd.Executor
+	}
+	if len(inCmd.Args) > 0 {
+		cmd.Args = inCmd.Args
+	}
+
+	cmd.Timeout = inCmd.Timeout
+	if inCmd.Env.Strategy != "" || len(inCmd.Env.Vals) > 0 {
+		cmd.Env = inCmd.Env
+	}
+}
+
+// validateCommandArgs ensures commands are always configured with arguments.
+func validateCommandArgs(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("command has no arguments")
+	}
+
+	return nil
 }

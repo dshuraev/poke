@@ -29,6 +29,7 @@ func ExecuteBinary(ctx context.Context, cmd Command) Result {
 	}
 
 	log.Printf("executor/bin: exec argv=%v", cmd.Args)
+	// #nosec G204 -- commands are configured by trusted config after validation.
 	cmdExec := exec.CommandContext(cmdCtx, cmd.Args[0], cmd.Args[1:]...)
 	cmdExec.Env = cmd.Env.Get().ToList()
 	output, err := cmdExec.CombinedOutput()
