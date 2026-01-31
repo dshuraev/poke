@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"poke/internal/server/request"
+	"strings"
 	"time"
 )
 
@@ -20,11 +21,68 @@ type httpCommandRequest struct {
 
 // Config for HTTP listener.
 type HTTPListenerConfig struct {
-	Host         string
-	Port         int
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
+	Host         string        `yaml:"host,omitempty"`
+	Port         int           `yaml:"port,omitempty"`
+	ReadTimeout  time.Duration `yaml:"read_timeout,omitempty"`
+	WriteTimeout time.Duration `yaml:"write_timeout,omitempty"`
+	IdleTimeout  time.Duration `yaml:"idle_timeout,omitempty"`
+}
+
+const (
+	defaultHTTPListenerHost = "127.0.0.1" // Default bind host when omitted.
+	defaultHTTPListenerPort = 8008        // Default port when omitted.
+	minHTTPListenerPort     = 1           // Minimum allowed port value.
+	maxHTTPListenerPort     = 65535       // Maximum allowed port value.
+)
+
+// UnmarshalYAML parses HTTP listener config per docs/configuration/listener.md.
+func (cfg *HTTPListenerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type httpListenerConfigInput struct {
+		Host         *string        `yaml:"host"`
+		Port         *int           `yaml:"port"`
+		ReadTimeout  *time.Duration `yaml:"read_timeout"`
+		WriteTimeout *time.Duration `yaml:"write_timeout"`
+		IdleTimeout  *time.Duration `yaml:"idle_timeout"`
+	}
+
+	*cfg = HTTPListenerConfig{
+		Host: defaultHTTPListenerHost,
+		Port: defaultHTTPListenerPort,
+	}
+
+	var in httpListenerConfigInput
+	if err := unmarshal(&in); err != nil {
+		return err
+	}
+
+	if in.Host != nil {
+		cfg.Host = *in.Host
+	}
+	if in.Port != nil {
+		cfg.Port = *in.Port
+	}
+	if in.ReadTimeout != nil {
+		cfg.ReadTimeout = *in.ReadTimeout
+	}
+	if in.WriteTimeout != nil {
+		cfg.WriteTimeout = *in.WriteTimeout
+	}
+	if in.IdleTimeout != nil {
+		cfg.IdleTimeout = *in.IdleTimeout
+	}
+
+	return cfg.validate()
+}
+
+// validate enforces required HTTP listener config invariants.
+func (cfg HTTPListenerConfig) validate() error {
+	if strings.TrimSpace(cfg.Host) == "" {
+		return fmt.Errorf("host must not be empty")
+	}
+	if cfg.Port < minHTTPListenerPort || cfg.Port > maxHTTPListenerPort {
+		return fmt.Errorf("port must be between %d and %d", minHTTPListenerPort, maxHTTPListenerPort)
+	}
+	return nil
 }
 
 func (cfg HTTPListenerConfig) address() string {
