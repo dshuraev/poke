@@ -1,7 +1,7 @@
 # Command Spec
 
-Commands are defined under the top-level `command` YAML node. Each key under
-`command` becomes a command ID that you can call through the remote API. Command
+Commands are defined under the top-level `commands` YAML node. Each key under
+`commands` becomes a command ID that you can call through the remote API. Command
 IDs must be unique within a running server.
 
 The minimal command definition is a list of arguments (or a single argument
@@ -29,7 +29,7 @@ curl -X PUT http://127.0.0.1:8080/ \
 Use an object when you need metadata or configuration beyond raw arguments.
 
 ```yaml
-command:
+commands:
   hello:
     name: "Hello"
     description: "say hello, via /usr/bin/echo binary"
