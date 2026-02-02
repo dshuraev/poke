@@ -1,7 +1,7 @@
 # Roadmap
 
 - HTTP Server
-  - [ ] TLS support
+  - [x] TLS support
   - [ ] Auth
 - Executors/Commands
   - [ ] Async execution, flags

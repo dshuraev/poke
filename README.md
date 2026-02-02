@@ -52,7 +52,6 @@ Documentation references:
 
 See `docs/roadmap.md` for the full list. Current WIP items:
 
-- HTTP TLS support
 - HTTP auth
 - Async execution and flags
 - Executor responses
