@@ -16,6 +16,14 @@ listeners:
     read_timeout: 5s
     write_timeout: 5s
     idle_timeout: 0s
+    # optionally enable TLS with server cert and key files
+    tls:
+      cert_file: /etc/poke/server.crt
+      key_file: /etc/poke/server.key
 ```
 
 If `host` or `port` are omitted, they default to `127.0.0.1:8008`.
+
+If `tls` is set, both `cert_file` and `key_file` are required.
+Environment variables in `cert_file` and `key_file` are expanded at load time.
+The resolved paths must exist and be readable by the server.
