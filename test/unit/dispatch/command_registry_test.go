@@ -147,6 +147,31 @@ nope:
 	}
 }
 
+// TestCommandRegistryExecutorNames returns unique executors with defaults applied.
+func TestCommandRegistryExecutorNames(t *testing.T) {
+	reg := dispatch.NewCommandRegistry(map[string]executor.Command{
+		"one": {
+			Args:     []string{"echo", "one"},
+			Executor: "bin",
+		},
+		"two": {
+			Args:     []string{"echo", "two"},
+			Executor: "custom",
+		},
+		"three": {
+			Args: []string{"echo", "three"},
+		},
+	})
+
+	executors := reg.ExecutorNames()
+	if len(executors) != 2 {
+		t.Fatalf("executors: got %v", executors)
+	}
+	if executors[0] != "bin" || executors[1] != "custom" {
+		t.Fatalf("executors: got %v", executors)
+	}
+}
+
 // getCommand fetches a command by ID and fails the test on error.
 func getCommand(t *testing.T, reg *dispatch.CommandRegistry, id string) executor.Command {
 	t.Helper()

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"fmt"
 	"poke/internal/server/executor"
+	"sort"
 
 	"github.com/goccy/go-yaml"
 )
@@ -70,6 +71,32 @@ func (reg *CommandRegistry) Get(id string) (executor.Command, error) {
 		return cmd, nil
 	}
 	return executor.Command{}, fmt.Errorf("command with ID %s not found", id)
+}
+
+// ExecutorNames returns the unique executor names used by registered commands.
+func (reg *CommandRegistry) ExecutorNames() []string {
+	if reg == nil || len(reg.cmds) == 0 {
+		return nil
+	}
+
+	defaultExecutor := executor.NewCommandDefault().Executor
+	executors := make(map[string]struct{}, len(reg.cmds))
+	for _, cmd := range reg.cmds {
+		name := cmd.Executor
+		if name == "" {
+			name = defaultExecutor
+		}
+		if name != "" {
+			executors[name] = struct{}{}
+		}
+	}
+
+	names := make([]string, 0, len(executors))
+	for name := range executors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // decodeCommandConfig unmarshals a per-command config node into a Command.

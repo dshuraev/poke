@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"poke/internal/server/request"
+	"sort"
 
 	"github.com/goccy/go-yaml"
 )
@@ -53,6 +54,41 @@ func (lc *ListenerConfig) UnmarshalYAML(unmarshall func(interface{}) error) erro
 
 	lc.listeners = listeners
 	return nil
+}
+
+// StartAll starts all configured listeners and returns the started instances.
+func (lc ListenerConfig) StartAll(ctx context.Context, ch chan<- request.CommandRequest) ([]Listener, error) {
+	if len(lc.listeners) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, 0, len(lc.listeners))
+	for listenerType := range lc.listeners {
+		keys = append(keys, listenerType)
+	}
+	sort.Strings(keys)
+
+	started := make([]Listener, 0, len(keys))
+	for _, listenerType := range keys {
+		entry := lc.listeners[listenerType]
+		switch listenerType {
+		case "http":
+			httpListener, ok := entry.listener.(*HTTPListener)
+			if !ok {
+				return nil, fmt.Errorf("listener http: invalid listener type %T", entry.listener)
+			}
+			cfg, ok := entry.config.(HTTPListenerConfig)
+			if !ok {
+				return nil, fmt.Errorf("listener http: invalid config type %T", entry.config)
+			}
+			httpListener.Listen(ctx, cfg, ch)
+		default:
+			return nil, fmt.Errorf("unsupported listener type %q", listenerType)
+		}
+		started = append(started, entry)
+	}
+
+	return started, nil
 }
 
 // decodeListenerConfig unmarshals a per-listener config node into a target struct.
