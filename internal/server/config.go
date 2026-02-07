@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+	"poke/internal/server/auth"
 	"poke/internal/server/dispatch"
 	"poke/internal/server/listener"
 
@@ -11,6 +13,7 @@ import (
 type Config struct {
 	Commands  dispatch.CommandRegistry `yaml:"commands"`
 	Listeners listener.ListenerConfig  `yaml:"listeners"`
+	Auth      auth.Auth                `yaml:"auth"`
 }
 
 // Parse unmarshals raw config bytes into a Config.
@@ -27,11 +30,16 @@ func (cfg *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type configInput struct {
 		Commands  *dispatch.CommandRegistry `yaml:"commands"`
 		Listeners *listener.ListenerConfig  `yaml:"listeners"`
+		Auth      *auth.Auth                `yaml:"auth"`
 	}
 
 	var in configInput
 	if err := unmarshal(&in); err != nil {
 		return err
+	}
+
+	if in.Auth == nil {
+		return fmt.Errorf("auth is required")
 	}
 
 	if in.Commands == nil {
@@ -54,5 +62,6 @@ func (cfg *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		cfg.Listeners = *in.Listeners
 	}
 
+	cfg.Auth = *in.Auth
 	return nil
 }

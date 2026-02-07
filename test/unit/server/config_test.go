@@ -13,6 +13,9 @@ commands:
   uptime: uptime
 listeners:
   http: {}
+auth:
+  api_token:
+    token: "secret"
 `)
 
 	cfg, err := server.Parse(input)
@@ -32,10 +35,10 @@ listeners:
 	}
 }
 
-// TestConfigParseAllowsEmptyConfig verifies Parse accepts an empty config.
-func TestConfigParseAllowsEmptyConfig(t *testing.T) {
-	if _, err := server.Parse([]byte(`{}`)); err != nil {
-		t.Fatalf("parse: %v", err)
+// TestConfigParseRejectsMissingAuth verifies Parse rejects configs without an auth block.
+func TestConfigParseRejectsMissingAuth(t *testing.T) {
+	if _, err := server.Parse([]byte(`{}`)); err == nil {
+		t.Fatalf("expected error for missing auth block")
 	}
 }
 
@@ -44,6 +47,9 @@ func TestConfigParseRejectsInvalidListener(t *testing.T) {
 	input := []byte(`
 listeners:
   bogus: {}
+auth:
+  api_token:
+    token: "secret"
 `)
 
 	if _, err := server.Parse(input); err == nil {
@@ -59,6 +65,9 @@ commands:
     name: "nope"
 listeners:
   http: {}
+auth:
+  api_token:
+    token: "secret"
 `)
 
 	if _, err := server.Parse(input); err == nil {
