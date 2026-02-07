@@ -9,7 +9,8 @@ const (
 type AuthContext struct {
 	// AuthKind selects the validator in Auth.Validators (e.g. "api_token").
 	AuthKind string
-	// ListenerType is the inbound listener type (e.g. "http").
+	// ListenerType is the inbound listener type (e.g. "http"), matching the keys
+	// used under the top-level `listeners` config node.
 	ListenerType string
 	// APIToken is the caller-provided API token for AuthTypeAPIToken.
 	APIToken string

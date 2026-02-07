@@ -6,19 +6,9 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-/*
-Example config:
-
-```yaml
-
-auth:
-	api_token:
-		listeners: [http]
-		token: "my-secret-token"
-```
-*/
-
 // Auth configures and dispatches authentication validators by auth kind.
+//
+// Configuration is loaded from the top-level `auth` node (see docs/configuration/auth.md).
 type Auth struct {
 	Validators map[string]Validator
 }
@@ -28,7 +18,7 @@ type Validator interface {
 	Validate(ctx *AuthContext) error
 }
 
-// UnmarshalYAML parses auth config blocks (e.g. `auth: { api_token: ... }`).
+// UnmarshalYAML parses the `auth` block and instantiates validators by auth kind.
 func (auth *Auth) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	*auth = Auth{Validators: map[string]Validator{}}
 
@@ -77,7 +67,10 @@ func (auth *Auth) Validate(ctx *AuthContext) error {
 	return validator.Validate(ctx)
 }
 
-// decodeAuthConfig unmarshals a per-auth-kind config node into a target struct.
+// decodeAuthConfig unmarshals a per-auth-kind config node into target.
+//
+// This helper exists because Auth.UnmarshalYAML first parses the `auth` node into a
+// generic map, then re-hydrates each auth-kind subtree into its strongly-typed config.
 func decodeAuthConfig(rawConfig interface{}, target interface{}) error {
 	if rawConfig == nil {
 		return yaml.Unmarshal([]byte(`{}`), target)

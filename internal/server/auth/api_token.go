@@ -16,6 +16,9 @@ import (
 //
 // Listeners, when non-empty, restricts which listener types accept this auth kind.
 type APITokenConfig struct {
+	// Listeners optionally restricts which listener types accept this auth kind.
+	//
+	// Values are normalized via strings.ToLower(strings.TrimSpace(value)).
 	Listeners []string
 
 	token string
@@ -23,15 +26,21 @@ type APITokenConfig struct {
 	file  string
 }
 
+// apiTokenSourceKind identifies which credential source was configured.
 type apiTokenSourceKind int
 
 const (
+	// apiTokenSourceKindUnknown is a sentinel for invalid/unset source selection.
 	apiTokenSourceKindUnknown apiTokenSourceKind = iota
+	// apiTokenSourceKindToken indicates the literal `token:` field was configured.
 	apiTokenSourceKindToken
+	// apiTokenSourceKindEnv indicates the `env:` field was configured.
 	apiTokenSourceKindEnv
+	// apiTokenSourceKindFile indicates the `file:` field was configured.
 	apiTokenSourceKindFile
 )
 
+// apiTokenSource captures the resolved token plus its provenance for diagnostics.
 type apiTokenSource struct {
 	kind     apiTokenSourceKind
 	token    string
@@ -73,6 +82,29 @@ func (cfg *APITokenConfig) UnmarshalYAML(unmarshal func(interface{}) error) erro
 	return nil
 }
 
+// Validate checks ctx against the configured API token and listener allow-list.
+func (cfg *APITokenConfig) Validate(ctx *AuthContext) error {
+	if ctx == nil {
+		return fmt.Errorf("auth context is required")
+	}
+	if ctx.AuthKind != AuthTypeAPIToken {
+		return fmt.Errorf("auth method mismatch: expected %q got %q", AuthTypeAPIToken, ctx.AuthKind)
+	}
+	if cfg.token == "" {
+		return fmt.Errorf("api_token is not configured")
+	}
+	if !cfg.allowsListenerType(ctx.ListenerType) {
+		return fmt.Errorf("api_token is not enabled for listener %q", ctx.ListenerType)
+	}
+
+	if subtle.ConstantTimeCompare([]byte(cfg.token), []byte(ctx.APIToken)) != 1 {
+		return fmt.Errorf("invalid api token")
+	}
+
+	return nil
+}
+
+// resolveAPITokenSource selects and resolves the configured token source.
 func resolveAPITokenSource(rawToken *string, rawEnv *string, rawFile *string) (apiTokenSource, error) {
 	kind, err := selectAPITokenSourceKind(rawToken, rawEnv, rawFile)
 	if err != nil {
@@ -103,6 +135,7 @@ func resolveAPITokenSource(rawToken *string, rawEnv *string, rawFile *string) (a
 	}
 }
 
+// selectAPITokenSourceKind enforces that exactly one of token, env, or file is set.
 func selectAPITokenSourceKind(rawToken *string, rawEnv *string, rawFile *string) (apiTokenSourceKind, error) {
 	tokenSet := rawToken != nil
 	envSet := rawEnv != nil
@@ -135,6 +168,7 @@ func selectAPITokenSourceKind(rawToken *string, rawEnv *string, rawFile *string)
 	return apiTokenSourceKindFile, nil
 }
 
+// resolveAPITokenFromLiteral validates and normalizes the literal token source.
 func resolveAPITokenFromLiteral(raw *string) (string, error) {
 	if raw == nil {
 		return "", fmt.Errorf("api_token token is required")
@@ -146,6 +180,7 @@ func resolveAPITokenFromLiteral(raw *string) (string, error) {
 	return token, nil
 }
 
+// resolveAPITokenFromEnv loads and validates the token from an environment variable.
 func resolveAPITokenFromEnv(raw *string) (token string, envName string, err error) {
 	if raw == nil {
 		return "", "", fmt.Errorf("api_token env is required")
@@ -168,6 +203,7 @@ func resolveAPITokenFromEnv(raw *string) (token string, envName string, err erro
 	return token, envName, nil
 }
 
+// resolveAPITokenFromFile loads and validates the token from a file on disk.
 func resolveAPITokenFromFile(raw *string) (token string, filePath string, err error) {
 	if raw == nil {
 		return "", "", fmt.Errorf("api_token file is required")
@@ -234,26 +270,4 @@ func (cfg *APITokenConfig) allowsListenerType(listenerType string) bool {
 		}
 	}
 	return false
-}
-
-// Validate checks ctx against the configured API token and listener allow-list.
-func (cfg *APITokenConfig) Validate(ctx *AuthContext) error {
-	if ctx == nil {
-		return fmt.Errorf("auth context is required")
-	}
-	if ctx.AuthKind != AuthTypeAPIToken {
-		return fmt.Errorf("auth method mismatch: expected %q got %q", AuthTypeAPIToken, ctx.AuthKind)
-	}
-	if cfg.token == "" {
-		return fmt.Errorf("api_token is not configured")
-	}
-	if !cfg.allowsListenerType(ctx.ListenerType) {
-		return fmt.Errorf("api_token is not enabled for listener %q", ctx.ListenerType)
-	}
-
-	if subtle.ConstantTimeCompare([]byte(cfg.token), []byte(ctx.APIToken)) != 1 {
-		return fmt.Errorf("invalid api token")
-	}
-
-	return nil
 }

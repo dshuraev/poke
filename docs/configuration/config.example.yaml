@@ -9,3 +9,8 @@ listeners:
     tls:
       cert_file: $XDG_CONFIG_HOME/poke/server.crt
       key_file: $XDG_CONFIG_HOME/poke/server.key
+
+auth:
+  api_token:
+    listeners: [http]
+    env: POKE_API_TOKEN
