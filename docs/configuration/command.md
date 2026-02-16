@@ -1,77 +1,71 @@
-# Command Spec
+# Command Configuration Reference
 
-Commands are defined under the top-level `commands` YAML node. Each key under
-`commands` becomes a command ID that you can call through the remote API. Command
-IDs must be unique within a running server.
+Commands are defined under top-level `commands`.
 
-The minimal command definition is a list of arguments (or a single argument
-string). The first argument must be a valid binary name that can be resolved via
-`PATH`.
+Each key under `commands` is a command identifier (`command_id`) callable via
+API requests.
 
-## Minimal Examples
+## Minimal Forms
+
+Single argument shorthand:
 
 ```yaml
-command:
-  uptime: uptime # single argument; executed as "uptime"
-  query-fs: ["df", "-h"] # list form; executed as "df -h"
+commands:
+  uptime: uptime
 ```
 
-Calling the `query-fs` command by ID:
+Argument list shorthand:
 
-```sh
-curl -X PUT http://127.0.0.1:8080/ \
-  -H "Content-Type: application/json" \
-  -d '{"command_id":"query-fs"}'
+```yaml
+commands:
+  query-fs: ["df", "-h"]
 ```
 
-## Full Command Object
-
-Use an object when you need metadata or configuration beyond raw arguments.
+## Full Command Form
 
 ```yaml
 commands:
   hello:
     name: "Hello"
-    description: "say hello, via /usr/bin/echo binary"
+    description: "Say hello"
     args: ["echo", "hello world"]
     executor: "bin"
-  list-home:
-    name: "ls"
-    description: "Commands can have ENV configuration"
-    env: # read more in the Env section
-      HOME: /srv
-    timeout: "5s" # duration with suffix, e.g. "5s", "1500ms"
+    timeout: 5s
+    env:
+      strategy: isolate
+      vals:
+        FOO: bar
 ```
 
-### Fields
+## Fields
 
-- `args` (required if object form): List of command arguments. The first entry
-  is the binary to execute.
-- `name` (optional): Human-readable command name.
-- `description` (optional): Human-readable command description.
-- `executor` (optional): Executor name used to run the command (e.g. `bin`).
-- `env` (optional): Environment configuration for this command.
-- `timeout` (optional): Timeout duration string with suffix (e.g. `5s`, `1500ms`).
+- `args` (required in object form): command and arguments.
+- `name` (optional): human-readable name.
+- `description` (optional): human-readable description.
+- `executor` (optional): executor name (`bin` is currently supported).
+- `timeout` (optional): Go duration string, for example `5s`, `1500ms`.
+- `env` (optional): environment config.
 
-## Env
-
-Commands can optionally define an `env` node. Keys and values are always treated
-as strings.
+## Environment Strategy
 
 ```yaml
 env:
-  strategy: isolate # optional; "isolate", "inherit", "extend", or "override"
-  vals: # optional; map of environment variables
-    FOO: hello world
-    BAR: 42
+  strategy: isolate
+  vals:
+    FOO: hello
 ```
 
-### Strategies
+Supported `strategy` values:
 
-- `isolate`: Use only the variables provided in `vals` (clean environment).
-- `inherit`: Use the parent process environment as-is.
-- `extend`: Start from the parent environment and add only missing keys from `vals`.
-- `override`: Start from the parent environment and overwrite with `vals`.
+- `isolate`: only `vals` are provided.
+- `inherit`: parent process environment only.
+- `extend`: parent env plus missing keys from `vals`.
+- `override`: parent env with `vals` overriding existing keys.
 
-If the `env` node is omitted, the default is `isolate` with an empty `vals` map,
-meaning the command runs in an empty environment.
+Default when `env` is omitted: `isolate` with empty `vals`.
+
+## See Also
+
+- `docs/configuration/server.md`
+- `docs/configuration/listener.md`
+- `docs/user/configuration.md`

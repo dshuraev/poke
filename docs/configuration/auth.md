@@ -1,33 +1,24 @@
-# Auth Spec
+# Authentication Configuration Reference
 
-Authentication is configured under each listener's `auth` YAML node.
+Authentication is configured per listener under `listeners.<type>.auth`.
 
-Each configured listener must define `auth` with at least one auth method.
+For HTTP, auth configuration lives in `listeners.http.auth`.
 
-Each listener's `auth` node is a map keyed by auth method name. Each configured
-method is validated at load time.
+## Supported Method
 
-## Minimal Example
+- `api_token`
 
-```yaml
-commands:
-  uptime: uptime
+## API Token Config
 
-listeners:
-  http:
-    auth:
-      api_token:
-        token: "my-secret-token"
-```
+Exactly one token source is required:
 
-## Methods
+- `token`: inline token value.
+- `env`: environment variable name.
+- `file`: path to file containing token.
 
-### `api_token`
+### Examples
 
-The `api_token` method validates a caller-provided token against a configured
-secret.
-
-#### Example (token literal)
+Literal token:
 
 ```yaml
 listeners:
@@ -37,7 +28,7 @@ listeners:
         token: "my-secret-token"
 ```
 
-#### Example (token from environment variable)
+Environment variable:
 
 ```yaml
 listeners:
@@ -47,7 +38,7 @@ listeners:
         env: "POKE_API_TOKEN"
 ```
 
-#### Example (token from file)
+File:
 
 ```yaml
 listeners:
@@ -57,33 +48,20 @@ listeners:
         file: "/run/secrets/poke_api_token"
 ```
 
-#### Fields
+## HTTP Headers
 
-Exactly one credential source must be configured:
+When using `api_token`, clients send:
 
-- `token` (optional): Literal token value.
-  - Must be non-empty after trimming whitespace.
-- `env` (optional): Environment variable name to read the token from.
-  - The variable must exist and be non-empty after trimming whitespace.
-- `file` (optional): Path to a file containing the token.
-  - The file must be readable by the server process.
-  - File contents are trimmed with whitespace/newlines removed from both ends.
+- `X-Poke-Auth-Method: api_token`
+- `X-Poke-API-Token: <token>`
 
-#### Notes
+## Notes
 
-- Token values are trimmed with `strings.TrimSpace(...)` to avoid common mistakes
-  (YAML indentation, trailing newlines in secret files, etc.).
-- Prefer `env` or `file` over `token` so secrets do not live in plaintext configs.
+- Token inputs are trimmed for surrounding whitespace.
+- Prefer `env` or `file` to avoid plain-text secrets in config files.
 
-## HTTP Usage
+## See Also
 
-When HTTP listener auth is configured, clients can request token validation by
-setting auth method and token via headers:
-
-```sh
-curl -X PUT http://127.0.0.1:8008/ \
-  -H "Content-Type: application/json" \
-  -H "X-Poke-Auth-Method: api_token" \
-  -H "X-Poke-API-Token: my-secret-token" \
-  -d '{"command_id":"uptime"}'
-```
+- `docs/configuration/listener.md`
+- `docs/user/authentication.md`
+- `docs/user/troubleshooting.md`

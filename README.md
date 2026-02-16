@@ -1,67 +1,58 @@
-# Poke Server
+# Poke
 
-Poke is a small server that listens for command requests and executes a
-whitelisted set of commands defined in config.
+Poke is a small command-execution server.
+
+It accepts remote command requests, validates them, and executes only commands
+that are explicitly whitelisted in configuration.
+
+## Who This Is For
+
+- Operators who need a small remote command runner with explicit allowlists.
+- Developers integrating infrastructure commands into automation workflows.
 
 ## Quickstart
 
-1. Create a config file (start from `docs/configuration/config.example.yaml`).
-2. Run the server with an explicit config path:
+1. Copy `docs/configuration/config.example.yaml` and adjust values.
+2. Start the server:
 
    ```sh
    go run ./cmd/server -c /path/to/poke.yml
    ```
 
-3. Send a command request (HTTP listener example):
+3. Send a request:
 
-   ```sh
-   curl -X PUT http://127.0.0.1:8008/ \
-     -H "Content-Type: application/json" \
-     -d '{"command_id":"uptime"}'
-   ```
+```sh
+curl -X PUT http://127.0.0.1:8008/ \
+  -H "Content-Type: application/json" \
+  -H "X-Poke-Auth-Method: api_token" \
+  -H "X-Poke-API-Token: my-secret-token" \
+  -d '{"command_id":"hello"}'
+```
 
-4. Send an authenticated command request (when `auth.api_token` is configured):
+The server returns `202 Accepted` when a command request is accepted for
+execution.
 
-   ```sh
-   curl -X PUT http://127.0.0.1:8008/ \
-     -H "Content-Type: application/json" \
-     -H "X-Poke-Auth-Method: api_token" \
-     -H "X-Poke-API-Token: my-secret-token" \
-     -d '{"command_id":"uptime"}'
-   ```
+## Documentation
 
-## Configuration
+Start here for full documentation maps:
 
-Poke reads configuration from `poke.yml`/`poke.yaml`. By default it searches:
+- User documentation: `docs/user/README.md`
+- Developer documentation: `docs/developer/README.md`
+- Full docs index: `docs/index.md`
 
-- `/etc/poke/poke.yml`
-- `$XDG_CONFIG_HOME/poke/poke.yml`
-- `$HOME/config/poke/poke.yml`
-- `$HOME/.poke/poke.yml`
+## Current Scope
 
-You can also pass a config path via `-c FILE` or `--config FILE`.
+Implemented:
 
-Documentation references:
+- HTTP listener (`PUT /`) for `{"command_id":"..."}` requests.
+- API token auth per listener.
+- Optional TLS for HTTP listener.
+- Binary command executor with command allowlist.
+- Per-command timeout and environment strategy.
+- Structured logging (stdout and journald sink options).
 
-- Server config: [server.md](./docs/configuration/server.md)
-- Command definitions: [command.md](./docs/configuration/command.md)
-- Listener definitions: [listener.md](./docs/configuration/listener.md)
-- Example config: [config.example.yaml](./docs/configuration/config.example.yaml)
-- Development guide: [development.md](./docs/development.md)
+In progress (see `docs/roadmap.md`):
 
-## Implemented Features
-
-- HTTP listener that accepts `PUT /` with `{"command_id":"..."}` payload.
-- Command registry with short and full command specs.
-- Whitelisted command execution via the binary executor.
-- Per-command environment strategies (`isolate`, `inherit`, `extend`, `override`).
-- Per-command timeouts and basic structured logging.
-- Graceful shutdown via context cancellation.
-
-## Work In Progress
-
-See `docs/roadmap.md` for the full list. Current WIP items:
-
-- Async execution and flags
-- Executor responses
-- Better logging and telemetry
+- Async execution and flags.
+- Executor responses.
+- Telemetry.

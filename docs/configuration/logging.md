@@ -1,6 +1,6 @@
-# Logging Configuration
+# Logging Configuration Reference
 
-Poke logging is configured under the top-level `logging` node.
+Logging is configured under top-level `logging`.
 
 ## Example
 
@@ -18,25 +18,25 @@ logging:
 
 ## Fields
 
-- `level` (optional): `debug`, `info`, `warn`, or `error`.
-- `format` (optional): `json` or `text`.
-- `add_source` (optional): Include source file and line metadata in log records.
-- `static_fields` (optional): Static key/value metadata added to every log record.
-- `sink` (optional): Sink configuration.
+- `level`: `debug`, `info`, `warn`, `error`.
+- `format`: `text` or `json`.
+- `add_source`: include source file and line metadata.
+- `static_fields`: key/value attributes added to all log records.
+- `sink`: sink settings.
 
 ## Sink
 
 ```yaml
 sink:
-  type: stdout # stdout or journald
+  type: stdout
 ```
 
-- `sink.type`: Selects the active sink.
-- `stdout`: Writes logs to standard output.
-- `journald`: Writes logs to the native journald socket. When journald is
-  unavailable, logging falls back to the configured fallback sink.
+Supported sink types:
 
-### Journald Sink
+- `stdout`
+- `journald`
+
+### Journald
 
 ```yaml
 sink:
@@ -46,8 +46,10 @@ sink:
     fallback: stdout
 ```
 
-- `identifier` (required when `type: journald`): journald identifier used by the service.
-- `fallback` (optional): sink used when journald is unavailable. Current valid value: `stdout`.
+Rules:
+
+- `identifier` is required for `journald`.
+- `fallback` currently supports `stdout`.
 
 ## Defaults
 
@@ -59,3 +61,8 @@ logging:
   sink:
     type: stdout
 ```
+
+## See Also
+
+- `docs/configuration/server.md`
+- `docs/user/troubleshooting.md`

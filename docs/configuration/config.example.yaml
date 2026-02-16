@@ -1,3 +1,11 @@
+# Example Poke configuration.
+# Reference docs:
+# - docs/configuration/server.md
+# - docs/configuration/command.md
+# - docs/configuration/listener.md
+# - docs/configuration/auth.md
+# - docs/configuration/logging.md
+
 commands:
   hello: ["echo", "hello"]
   touch: ["touch", "tmp"]
