@@ -4,39 +4,56 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"poke/internal/server"
+	serverlogging "poke/internal/server/logging"
 	"syscall"
 )
 
 // main wires CLI flags into server startup.
 func main() {
+	bootstrapLogger, err := serverlogging.New(serverlogging.Config{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging init: %v\n", err)
+		os.Exit(1)
+	}
+
 	configPath, err := resolveConfigPath()
 	if err != nil {
-		log.Fatalf("config path: %v", err)
+		bootstrapLogger.Error("config path resolution failed", "event", "config_path_failed", "error", err)
+		os.Exit(1)
 	}
 
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		log.Fatalf("config load: %v", err)
+		bootstrapLogger.Error("config load failed", "event", "config_load_failed", "error", err)
+		os.Exit(1)
 	}
+
+	logger, err := serverlogging.New(cfg.Logging)
+	if err != nil {
+		bootstrapLogger.Error("logging init failed", "event", "logging_init_failed", "error", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	runtime, err := server.Start(ctx, cfg)
 	if err != nil {
-		log.Fatalf("server start: %v", err)
+		logger.Error("server start failed", "event", "server_start_failed", "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("server started with config %s", configPath)
+	logger.Info("server started", "event", "server_started", "config_path", configPath)
 
 	<-ctx.Done()
 	close(runtime.RequestChannel)
-	log.Printf("server shutting down")
+	logger.Info("server shutting down", "event", "server_shutting_down")
 }
 
 // resolveConfigPath parses flags and selects the configuration file path.

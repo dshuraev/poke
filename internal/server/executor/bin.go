@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os/exec"
 )
 
+// ExecuteBinary runs a configured command using os/exec and returns execution result.
 func ExecuteBinary(ctx context.Context, cmd Command) Result {
-	log.Printf("executor/bin: start command %s[%s]", cmd.ID, cmd.Name)
+	logger := slog.Default().With("component", "executor/bin")
+	logger.Info("binary execution started", "event", "binary_execution_started", "command_id", cmd.ID, "command_name", cmd.Name)
+
 	var cmdCtx context.Context
 	var cancel context.CancelFunc
 	if cmd.Timeout > 0 {
@@ -21,14 +24,14 @@ func ExecuteBinary(ctx context.Context, cmd Command) Result {
 
 	err := validateCommand(cmd)
 	if err != nil {
-		log.Printf("executor/bin: invalid command %s[%s]: %v", cmd.ID, cmd.Name, err)
+		logger.Warn("invalid command", "event", "binary_command_invalid", "command_id", cmd.ID, "command_name", cmd.Name, "error", err)
 		return Result{
 			ExitCode: -1,
 			Error:    err,
 		}
 	}
 
-	log.Printf("executor/bin: exec argv=%v", cmd.Args)
+	logger.Debug("invoking command", "event", "binary_command_invoking", "command_id", cmd.ID, "command_name", cmd.Name, "args", cmd.Args)
 	// #nosec G204 -- commands are configured by trusted config after validation.
 	cmdExec := exec.CommandContext(cmdCtx, cmd.Args[0], cmd.Args[1:]...)
 	cmdExec.Env = cmd.Env.Get().ToList()
@@ -39,7 +42,7 @@ func ExecuteBinary(ctx context.Context, cmd Command) Result {
 		if execErr == nil {
 			execErr = errors.New("unknown error")
 		}
-		log.Printf("executor/bin: failed to execute %s[%s]: %v", cmd.ID, cmd.Name, execErr)
+		logger.Error("failed to execute command", "event", "binary_execution_failed_to_start", "command_id", cmd.ID, "command_name", cmd.Name, "error", execErr)
 		return Result{
 			Output:   output,
 			ExitCode: -1,
@@ -49,9 +52,9 @@ func ExecuteBinary(ctx context.Context, cmd Command) Result {
 
 	exitCode := cmdExec.ProcessState.ExitCode()
 	if err != nil {
-		log.Printf("executor/bin: exit %d for %s[%s]: %v", exitCode, cmd.ID, cmd.Name, err)
+		logger.Error("command exited with error", "event", "binary_execution_completed_with_error", "command_id", cmd.ID, "command_name", cmd.Name, "exit_code", exitCode, "error", err)
 	} else {
-		log.Printf("executor/bin: exit %d for %s[%s]", exitCode, cmd.ID, cmd.Name)
+		logger.Info("command completed", "event", "binary_execution_completed", "command_id", cmd.ID, "command_name", cmd.Name, "exit_code", exitCode)
 	}
 	return Result{
 		Output:   output,

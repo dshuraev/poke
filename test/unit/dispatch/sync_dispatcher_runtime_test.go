@@ -3,7 +3,7 @@ package dispatch_test
 import (
 	"bytes"
 	"context"
-	"log"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +43,7 @@ func TestSyncDispatcherRunStopsWhenContextIsCanceled(t *testing.T) {
 		waitDone(t, done)
 	})
 
-	if !strings.Contains(logs, "context canceled") {
+	if !strings.Contains(logs, "event=context_canceled") {
 		t.Fatalf("expected context canceled log, got %q", logs)
 	}
 }
@@ -68,7 +68,7 @@ func TestSyncDispatcherRunStopsWhenRequestChannelCloses(t *testing.T) {
 		waitDone(t, done)
 	})
 
-	if !strings.Contains(logs, "request channel closed") {
+	if !strings.Contains(logs, "event=request_channel_closed") {
 		t.Fatalf("expected channel-closed log, got %q", logs)
 	}
 }
@@ -94,7 +94,7 @@ func TestSyncDispatcherRunSkipsUnknownCommand(t *testing.T) {
 		waitDone(t, done)
 	})
 
-	if !strings.Contains(logs, "command with ID missing not found") {
+	if !strings.Contains(logs, "event=command_lookup_failed") || !strings.Contains(logs, "command_id=missing") {
 		t.Fatalf("expected missing command log, got %q", logs)
 	}
 }
@@ -125,7 +125,7 @@ func TestSyncDispatcherRunHandlesUnknownExecutor(t *testing.T) {
 		waitDone(t, done)
 	})
 
-	if !strings.Contains(logs, "unknown executor") {
+	if !strings.Contains(logs, "event=unknown_executor") {
 		t.Fatalf("expected unknown executor log, got %q", logs)
 	}
 }
@@ -158,7 +158,7 @@ func TestSyncDispatcherRunExecutesCommand(t *testing.T) {
 		waitDone(t, done)
 	})
 
-	if !strings.Contains(logs, "completed with exit 0") {
+	if !strings.Contains(logs, "event=command_execution_completed") || !strings.Contains(logs, "exit_code=0") {
 		t.Fatalf("expected successful execution log, got %q", logs)
 	}
 }
@@ -167,14 +167,19 @@ func captureLogs(t *testing.T, run func()) string {
 	t.Helper()
 
 	var buf bytes.Buffer
-	oldWriter := log.Writer()
-	oldFlags := log.Flags()
-
-	log.SetOutput(&buf)
-	log.SetFlags(0)
+	oldDefault := slog.Default()
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
+			if attr.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return attr
+		},
+	})
+	slog.SetDefault(slog.New(handler))
 	defer func() {
-		log.SetOutput(oldWriter)
-		log.SetFlags(oldFlags)
+		slog.SetDefault(oldDefault)
 	}()
 
 	run()

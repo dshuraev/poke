@@ -12,3 +12,13 @@ listeners:
     auth:
       api_token:
         env: POKE_API_TOKEN
+
+logging:
+  level: info
+  format: text
+  add_source: false
+  static_fields:
+    service: poke
+    env: dev
+  sink:
+    type: stdout

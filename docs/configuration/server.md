@@ -4,6 +4,7 @@ Poke server is configured with `poke.yml`. The file defines what commands the
 server can execute and how clients connect to request those commands.
 
 The main configuration blocks are `commands` and `listeners`.
+The optional `logging` block configures log level, format, and sink.
 
 ## Full Example
 
@@ -22,6 +23,16 @@ listeners:
     auth:
       api_token:
         token: "my-secret-token"
+
+logging:
+  level: info
+  format: text
+  add_source: false
+  static_fields:
+    service: poke
+    env: prod
+  sink:
+    type: stdout
 ```
 
 ## Commands
@@ -53,8 +64,35 @@ listeners:
 
 for more information, see [listeners configuration](./listener.md).
 
+## Logging
+
+`logging` controls server log output shape and sink:
+
+```yaml
+logging:
+  level: info # debug, info, warn, error
+  format: text # text or json
+  add_source: false
+  static_fields:
+    service: poke
+  sink:
+    type: stdout # stdout or journald
+```
+
+For full options, see [logging configuration](./logging.md).
+
 ## Defaults
 
-There are no server-level defaults.
+`logging` defaults to:
+
+```yaml
+logging:
+  level: info
+  format: text
+  add_source: false
+  sink:
+    type: stdout
+```
+
 Defaults for command execution and listener settings, including listener auth,
 are documented in their respective configuration guides.

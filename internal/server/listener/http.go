@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -255,6 +255,8 @@ func (cfg HTTPListenerConfig) address() string {
 }
 
 func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest) error {
+	logger := slog.Default().With("component", "listener/http")
+
 	l.srv = &http.Server{
 		Addr:         cfg.address(),
 		ReadTimeout:  cfg.ReadTimeout,
@@ -262,7 +264,7 @@ func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch ch
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
-	logHTTPListenerStart(cfg)
+	logHTTPListenerStart(logger, cfg)
 	l.srv.Handler = newHTTPHandler(ctx, cfg, ch)
 
 	srvListener, err := buildHTTPServerListener(cfg)
@@ -270,18 +272,18 @@ func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch ch
 		return err
 	}
 
-	startHTTPListenerShutdownLoop(ctx, l.srv, cfg.address())
-	startHTTPServeLoop(l.srv, srvListener, cfg.address())
+	startHTTPListenerShutdownLoop(ctx, l.srv, cfg.address(), logger)
+	startHTTPServeLoop(l.srv, srvListener, cfg.address(), logger)
 
 	return nil
 }
 
-func logHTTPListenerStart(cfg HTTPListenerConfig) {
+func logHTTPListenerStart(logger *slog.Logger, cfg HTTPListenerConfig) {
 	if cfg.TLS != nil {
-		log.Printf("http listener: starting with tls addr=%s", cfg.address())
+		logger.Info("listener starting with tls", "event", "listener_starting_tls", "listener", "http", "address", cfg.address())
 		return
 	}
-	log.Printf("http listener: starting without tls addr=%s", cfg.address())
+	logger.Info("listener starting without tls", "event", "listener_starting_plain", "listener", "http", "address", cfg.address())
 }
 
 func newHTTPHandler(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest) http.Handler {
@@ -293,7 +295,8 @@ func newHTTPHandler(ctx context.Context, cfg HTTPListenerConfig, ch chan<- reque
 }
 
 func handleHTTPCommandRequest(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest, w http.ResponseWriter, r *http.Request) {
-	log.Printf("http request: method=%s path=%s remote=%s", r.Method, r.URL.Path, r.RemoteAddr)
+	logger := slog.Default().With("component", "listener/http")
+	logger.Info("request received", "event", "request_received", "listener", "http", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 	if r.Method != http.MethodPut {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -301,22 +304,22 @@ func handleHTTPCommandRequest(ctx context.Context, cfg HTTPListenerConfig, ch ch
 
 	req, err := decodeHTTPCommandRequest(r)
 	if err != nil {
-		log.Printf("http request: invalid json: %v", err)
+		logger.Warn("invalid json", "event", "request_invalid_json", "listener", "http", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr, "error", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if req.CommandID == "" {
-		log.Printf("http request: missing command_id")
+		logger.Warn("missing command id", "event", "request_missing_command_id", "listener", "http", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if err := validateHTTPCommandAuth(cfg, r.Header); err != nil {
-		log.Printf("http request: auth failed command_id=%s err=%v", req.CommandID, err)
+		logger.Warn("auth failed", "event", "request_auth_failed", "listener", "http", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr, "command_id", req.CommandID, "error", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	if !enqueueHTTPCommandRequest(ctx, ch, req.CommandID) {
+	if !enqueueHTTPCommandRequest(ctx, ch, req.CommandID, logger) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
@@ -331,13 +334,13 @@ func decodeHTTPCommandRequest(r *http.Request) (httpCommandRequest, error) {
 	return req, nil
 }
 
-func enqueueHTTPCommandRequest(ctx context.Context, ch chan<- request.CommandRequest, commandID string) bool {
+func enqueueHTTPCommandRequest(ctx context.Context, ch chan<- request.CommandRequest, commandID string, logger *slog.Logger) bool {
 	select {
 	case <-ctx.Done():
-		log.Printf("http request: context canceled before enqueue command_id=%s", commandID)
+		logger.Warn("context canceled before enqueue", "event", "request_enqueue_canceled", "listener", "http", "command_id", commandID)
 		return false
 	case ch <- request.CommandRequest{CommandID: commandID}:
-		log.Printf("http request: enqueued command_id=%s", commandID)
+		logger.Info("request enqueued", "event", "request_enqueued", "listener", "http", "command_id", commandID)
 		return true
 	}
 }
@@ -363,7 +366,7 @@ func buildHTTPServerListener(cfg HTTPListenerConfig) (net.Listener, error) {
 	}), nil
 }
 
-func startHTTPListenerShutdownLoop(ctx context.Context, srv *http.Server, addr string) {
+func startHTTPListenerShutdownLoop(ctx context.Context, srv *http.Server, addr string, logger *slog.Logger) {
 	go func() {
 		<-ctx.Done()
 
@@ -371,15 +374,15 @@ func startHTTPListenerShutdownLoop(ctx context.Context, srv *http.Server, addr s
 		defer cancel()
 
 		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("http listener: shutdown failed addr=%s err=%v", addr, err)
+			logger.Error("listener shutdown failed", "event", "listener_shutdown_failed", "listener", "http", "address", addr, "error", err)
 		}
 	}()
 }
 
-func startHTTPServeLoop(srv *http.Server, listener net.Listener, addr string) {
+func startHTTPServeLoop(srv *http.Server, listener net.Listener, addr string, logger *slog.Logger) {
 	go func() {
 		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("http listener: serve failed addr=%s err=%v", addr, err)
+			logger.Error("listener serve failed", "event", "listener_serve_failed", "listener", "http", "address", addr, "error", err)
 		}
 	}()
 }

@@ -3,7 +3,8 @@ package dispatch
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"poke/internal/server/executor"
 	"poke/internal/server/request"
 )
@@ -13,9 +14,10 @@ type SyncDispatcher struct {
 	registry  *CommandRegistry               // command registry
 	reqCh     <-chan request.CommandRequest  // request input stream, executor routes them
 	executors map[string]executor.ExecutorFn // worker input channels
+	logger    *slog.Logger                   // dispatcher logger
 }
 
-// Create new synchronout dispatcher for specified executor types.
+// NewSyncDispatcher constructs a synchronous dispatcher for configured executors.
 //
 // SyncDispatcher executes commands one at a time, taking new requests from
 // reqCh only after the previous one completes.
@@ -33,45 +35,52 @@ func NewSyncDispatcher(ctx context.Context, registry *CommandRegistry, executors
 		}
 	}
 
+	logger := slog.Default()
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
 	return &SyncDispatcher{
 		ctx:       ctx,
 		registry:  registry,
 		reqCh:     reqCh,
 		executors: workerChs,
+		logger:    logger.With("component", "dispatcher"),
 	}, nil
 }
 
+// Run consumes requests and executes commands serially until context or channel closure.
 func (d *SyncDispatcher) Run() {
-	log.Printf("dispatcher: sync loop started")
+	d.logger.Info("sync loop started", "event", "loop_started")
 	for {
 		select {
 		case <-d.ctx.Done():
-			log.Printf("dispatcher: context canceled, stopping")
+			d.logger.Info("context canceled, stopping", "event", "context_canceled")
 			return
 		case req, ok := <-d.reqCh:
 			if !ok {
-				log.Printf("dispatcher: request channel closed, stopping")
+				d.logger.Info("request channel closed, stopping", "event", "request_channel_closed")
 				return
 			}
-			log.Printf("dispatcher: request received command_id=%s", req.CommandID)
+			d.logger.Info("request received", "event", "request_received", "command_id", req.CommandID)
 			cmd, err := d.registry.Get(req.CommandID)
 			if err != nil {
-				log.Printf("executor: request for command %s failed: %v", req.CommandID, err)
+				d.logger.Warn("command lookup failed", "event", "command_lookup_failed", "command_id", req.CommandID, "error", err)
 				continue
 			}
 			cmd.ID = req.CommandID
 			fn, exists := d.executors[cmd.Executor]
 			if !exists {
-				log.Printf("executor: unknown executor %q for command %s[%s]", cmd.Executor, cmd.ID, cmd.Name)
+				d.logger.Warn("unknown executor", "event", "unknown_executor", "executor", cmd.Executor, "command_id", cmd.ID, "command_name", cmd.Name)
 				continue
 			}
-			log.Printf("executor: executing command %s[%s] via %s", cmd.ID, cmd.Name, cmd.Executor)
+			d.logger.Info("executing command", "event", "command_execution_started", "executor", cmd.Executor, "command_id", cmd.ID, "command_name", cmd.Name)
 			result := fn(d.ctx, cmd)
 			if result.Error != nil {
-				log.Printf("executor: command %s[%s] failed with exit %d: %v", cmd.ID, cmd.Name, result.ExitCode, result.Error)
+				d.logger.Error("command execution failed", "event", "command_execution_failed", "command_id", cmd.ID, "command_name", cmd.Name, "exit_code", result.ExitCode, "error", result.Error)
 				continue
 			}
-			log.Printf("executor: command %s[%s] completed with exit %d", cmd.ID, cmd.Name, result.ExitCode)
+			d.logger.Info("command execution completed", "event", "command_execution_completed", "command_id", cmd.ID, "command_name", cmd.Name, "exit_code", result.ExitCode)
 		}
 	}
 }

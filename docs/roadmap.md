@@ -8,5 +8,5 @@
 - Executors/Listeners
   - [ ] Executor responses
 - Observability
-  - [ ] Better logging
+  - [x] Better logging
   - [ ] Telemetry
