@@ -2,7 +2,7 @@
 
 - HTTP Server
   - [x] TLS support
-  - [ ] Auth
+  - [x] Auth
 - Executors/Commands
   - [ ] Async execution, flags
 - Executors/Listeners
