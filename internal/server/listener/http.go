@@ -2,9 +2,12 @@ package listener
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"poke/internal/server/auth"
@@ -137,6 +140,7 @@ const (
 	defaultHTTPListenerPort = 8008               // Default port when omitted.
 	minHTTPListenerPort     = 1                  // Minimum allowed port value.
 	maxHTTPListenerPort     = 65535              // Maximum allowed port value.
+	httpShutdownTimeout     = 5 * time.Second    // Graceful shutdown timeout after context cancellation.
 	httpListenerType        = "http"             // Listener type identifier used in auth contexts.
 	httpAPITokenHeader      = "X-Poke-API-Token" // #nosec G101 -- Header key identifier, not a secret.
 	httpAuthMethodHeader    = "X-Poke-Auth-Method"
@@ -250,7 +254,7 @@ func (cfg HTTPListenerConfig) address() string {
 	return fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 }
 
-func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest) {
+func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest) error {
 	l.srv = &http.Server{
 		Addr:         cfg.address(),
 		ReadTimeout:  cfg.ReadTimeout,
@@ -258,53 +262,124 @@ func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch ch
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
-	if cfg.TLS != nil {
-		log.Printf("http listener: starting with tls addr=%s", cfg.address())
-	} else {
-		log.Printf("http listener: starting without tls addr=%s", cfg.address())
+	logHTTPListenerStart(cfg)
+	l.srv.Handler = newHTTPHandler(ctx, cfg, ch)
+
+	srvListener, err := buildHTTPServerListener(cfg)
+	if err != nil {
+		return err
 	}
 
+	startHTTPListenerShutdownLoop(ctx, l.srv, cfg.address())
+	startHTTPServeLoop(l.srv, srvListener, cfg.address())
+
+	return nil
+}
+
+func logHTTPListenerStart(cfg HTTPListenerConfig) {
+	if cfg.TLS != nil {
+		log.Printf("http listener: starting with tls addr=%s", cfg.address())
+		return
+	}
+	log.Printf("http listener: starting without tls addr=%s", cfg.address())
+}
+
+func newHTTPHandler(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("http request: method=%s path=%s remote=%s", r.Method, r.URL.Path, r.RemoteAddr)
-		if r.Method != http.MethodPut {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var req httpCommandRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("http request: invalid json: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if req.CommandID == "" {
-			log.Printf("http request: missing command_id")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if err := validateHTTPCommandAuth(cfg, r.Header); err != nil {
-			log.Printf("http request: auth failed command_id=%s err=%v", req.CommandID, err)
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			log.Printf("http request: context canceled before enqueue command_id=%s", req.CommandID)
-			w.WriteHeader(http.StatusServiceUnavailable)
-		case ch <- request.CommandRequest{CommandID: req.CommandID}:
-			log.Printf("http request: enqueued command_id=%s", req.CommandID)
-			w.WriteHeader(http.StatusAccepted)
-		}
+		handleHTTPCommandRequest(ctx, cfg, ch, w, r)
 	})
+	return mux
+}
 
-	l.srv.Handler = mux
+func handleHTTPCommandRequest(ctx context.Context, cfg HTTPListenerConfig, ch chan<- request.CommandRequest, w http.ResponseWriter, r *http.Request) {
+	log.Printf("http request: method=%s path=%s remote=%s", r.Method, r.URL.Path, r.RemoteAddr)
+	if r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	req, err := decodeHTTPCommandRequest(r)
+	if err != nil {
+		log.Printf("http request: invalid json: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.CommandID == "" {
+		log.Printf("http request: missing command_id")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := validateHTTPCommandAuth(cfg, r.Header); err != nil {
+		log.Printf("http request: auth failed command_id=%s err=%v", req.CommandID, err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if !enqueueHTTPCommandRequest(ctx, ch, req.CommandID) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func decodeHTTPCommandRequest(r *http.Request) (httpCommandRequest, error) {
+	var req httpCommandRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return httpCommandRequest{}, err
+	}
+	return req, nil
+}
+
+func enqueueHTTPCommandRequest(ctx context.Context, ch chan<- request.CommandRequest, commandID string) bool {
+	select {
+	case <-ctx.Done():
+		log.Printf("http request: context canceled before enqueue command_id=%s", commandID)
+		return false
+	case ch <- request.CommandRequest{CommandID: commandID}:
+		log.Printf("http request: enqueued command_id=%s", commandID)
+		return true
+	}
+}
+
+func buildHTTPServerListener(cfg HTTPListenerConfig) (net.Listener, error) {
+	rawListener, err := net.Listen("tcp", cfg.address())
+	if err != nil {
+		return nil, fmt.Errorf("start listener on %s: %w", cfg.address(), err)
+	}
+	if cfg.TLS == nil {
+		return rawListener, nil
+	}
+
+	tlsCert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+	if err != nil {
+		_ = rawListener.Close()
+		return nil, fmt.Errorf("load tls key pair: %w", err)
+	}
+
+	return tls.NewListener(rawListener, &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		MinVersion:   tls.VersionTLS12,
+	}), nil
+}
+
+func startHTTPListenerShutdownLoop(ctx context.Context, srv *http.Server, addr string) {
 	go func() {
-		if cfg.TLS != nil {
-			_ = l.srv.ListenAndServeTLS(cfg.TLS.CertFile, cfg.TLS.KeyFile)
-			return
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), httpShutdownTimeout)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("http listener: shutdown failed addr=%s err=%v", addr, err)
 		}
-		_ = l.srv.ListenAndServe()
+	}()
+}
+
+func startHTTPServeLoop(srv *http.Server, listener net.Listener, addr string) {
+	go func() {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("http listener: serve failed addr=%s err=%v", addr, err)
+		}
 	}()
 }

@@ -10,7 +10,7 @@ import (
 )
 
 type RequestSource[T any] interface {
-	Listen(ctx context.Context, cfg T, ch chan<- request.CommandRequest)
+	Listen(ctx context.Context, cfg T, ch chan<- request.CommandRequest) error
 }
 
 type Listener struct {
@@ -81,7 +81,9 @@ func (lc ListenerConfig) StartAll(ctx context.Context, ch chan<- request.Command
 			if !ok {
 				return nil, fmt.Errorf("listener http: invalid config type %T", entry.config)
 			}
-			httpListener.Listen(ctx, cfg, ch)
+			if err := httpListener.Listen(ctx, cfg, ch); err != nil {
+				return nil, fmt.Errorf("listener http: %w", err)
+			}
 		default:
 			return nil, fmt.Errorf("unsupported listener type %q", listenerType)
 		}

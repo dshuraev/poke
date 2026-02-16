@@ -114,7 +114,9 @@ func startHTTPListener(t *testing.T, cfg listener.HTTPListenerConfig, reqCh chan
 	t.Cleanup(cancel)
 
 	var httpListener listener.HTTPListener
-	httpListener.Listen(ctx, cfg, reqCh)
+	if err := httpListener.Listen(ctx, cfg, reqCh); err != nil {
+		t.Fatalf("listen: %v", err)
+	}
 }
 
 func mustHTTPListenerConfigWithToken(t *testing.T, port int, token string) listener.HTTPListenerConfig {
