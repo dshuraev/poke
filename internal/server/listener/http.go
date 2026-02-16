@@ -133,11 +133,49 @@ type HTTPListenerConfig struct {
 }
 
 const (
-	defaultHTTPListenerHost = "127.0.0.1" // Default bind host when omitted.
-	defaultHTTPListenerPort = 8008        // Default port when omitted.
-	minHTTPListenerPort     = 1           // Minimum allowed port value.
-	maxHTTPListenerPort     = 65535       // Maximum allowed port value.
+	defaultHTTPListenerHost = "127.0.0.1"        // Default bind host when omitted.
+	defaultHTTPListenerPort = 8008               // Default port when omitted.
+	minHTTPListenerPort     = 1                  // Minimum allowed port value.
+	maxHTTPListenerPort     = 65535              // Maximum allowed port value.
+	httpListenerType        = "http"             // Listener type identifier used in auth contexts.
+	httpAPITokenHeader      = "X-Poke-API-Token" // #nosec G101 -- Header key identifier, not a secret.
+	httpAuthMethodHeader    = "X-Poke-Auth-Method"
 )
+
+// validateHTTPCommandAuth validates request-scoped auth when listener auth validators are configured.
+func validateHTTPCommandAuth(cfg HTTPListenerConfig, headers http.Header) error {
+	if cfg.Auth == nil || len(cfg.Auth.Validators) == 0 {
+		return nil
+	}
+
+	method := strings.TrimSpace(headers.Get(httpAuthMethodHeader))
+	if method == "" {
+		return fmt.Errorf("auth method header %q is required", httpAuthMethodHeader)
+	}
+
+	validator, exists := cfg.Auth.Validators[method]
+	if !exists {
+		return fmt.Errorf("auth method %q is not configured", method)
+	}
+
+	authCtx, err := buildHTTPAuthContext(method, headers)
+	if err != nil {
+		return err
+	}
+
+	return validator.Validate(&authCtx)
+}
+
+// buildHTTPAuthContext maps a request auth method to its auth context.
+func buildHTTPAuthContext(method string, headers http.Header) (auth.AuthContext, error) {
+	switch method {
+	case auth.AuthTypeAPIToken:
+		token := strings.TrimSpace(headers.Get(httpAPITokenHeader))
+		return auth.NewAPITokenContext(httpListenerType, token), nil
+	default:
+		return auth.AuthContext{}, fmt.Errorf("unsupported auth method %q", method)
+	}
+}
 
 // UnmarshalYAML parses HTTP listener config per docs/configuration/listener.md.
 func (cfg *HTTPListenerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -243,6 +281,11 @@ func (l *HTTPListener) Listen(ctx context.Context, cfg HTTPListenerConfig, ch ch
 		if req.CommandID == "" {
 			log.Printf("http request: missing command_id")
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := validateHTTPCommandAuth(cfg, r.Header); err != nil {
+			log.Printf("http request: auth failed command_id=%s err=%v", req.CommandID, err)
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 

@@ -20,6 +20,16 @@ whitelisted set of commands defined in config.
      -d '{"command_id":"uptime"}'
    ```
 
+4. Send an authenticated command request (when `auth.api_token` is configured):
+
+   ```sh
+   curl -X PUT http://127.0.0.1:8008/ \
+     -H "Content-Type: application/json" \
+     -H "X-Poke-Auth-Method: api_token" \
+     -H "X-Poke-API-Token: my-secret-token" \
+     -d '{"command_id":"uptime"}'
+   ```
+
 ## Configuration
 
 Poke reads configuration from `poke.yml`/`poke.yaml`. By default it searches:
@@ -52,7 +62,6 @@ Documentation references:
 
 See `docs/roadmap.md` for the full list. Current WIP items:
 
-- HTTP auth
 - Async execution and flags
 - Executor responses
 - Better logging and telemetry

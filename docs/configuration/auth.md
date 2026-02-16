@@ -74,3 +74,16 @@ Exactly one credential source must be configured:
 - Token values are trimmed with `strings.TrimSpace(...)` to avoid common mistakes
   (YAML indentation, trailing newlines in secret files, etc.).
 - Prefer `env` or `file` over `token` so secrets do not live in plaintext configs.
+
+## HTTP Usage
+
+When HTTP listener auth is configured, clients can request token validation by
+setting auth method and token via headers:
+
+```sh
+curl -X PUT http://127.0.0.1:8008/ \
+  -H "Content-Type: application/json" \
+  -H "X-Poke-Auth-Method: api_token" \
+  -H "X-Poke-API-Token: my-secret-token" \
+  -d '{"command_id":"uptime"}'
+```
