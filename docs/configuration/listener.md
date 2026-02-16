@@ -20,6 +20,10 @@ listeners:
     tls:
       cert_file: /etc/poke/server.crt
       key_file: /etc/poke/server.key
+    # auth is required per listener
+    auth:
+      api_token:
+        token: "my-secret-token"
 ```
 
 If `host` or `port` are omitted, they default to `127.0.0.1:8008`.
@@ -27,3 +31,8 @@ If `host` or `port` are omitted, they default to `127.0.0.1:8008`.
 If `tls` is set, both `cert_file` and `key_file` are required.
 Environment variables in `cert_file` and `key_file` are expanded at load time.
 The resolved paths must exist and be readable by the server.
+
+`auth` is required for each configured listener.
+Auth methods are configured under each listener node (for example
+`listeners.http.auth.api_token`).
+For auth method details, see [auth configuration](./auth.md).

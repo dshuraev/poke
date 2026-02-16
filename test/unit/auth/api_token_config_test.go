@@ -11,7 +11,6 @@ import (
 
 func TestAPITokenConfigUnmarshalTokenAndValidate(t *testing.T) {
 	input := []byte(`
-listeners: [http]
 token: "my-secret-token"
 `)
 
@@ -104,20 +103,15 @@ env: SOME_ENV
 	}
 }
 
-func TestAPITokenConfigValidateListenerNotAllowed(t *testing.T) {
+func TestAPITokenConfigRejectsLegacyListenersField(t *testing.T) {
 	input := []byte(`
 listeners: [http]
 token: "x"
 `)
 
 	var cfg auth.APITokenConfig
-	if err := yaml.Unmarshal(input, &cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	ctx := auth.NewAPITokenContext("udp", "x")
-	if err := cfg.Validate(&ctx); err == nil {
-		t.Fatalf("expected error for disallowed listener type")
+	if err := yaml.Unmarshal(input, &cfg); err == nil {
+		t.Fatalf("expected error for legacy listeners field")
 	}
 }
 

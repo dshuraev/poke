@@ -3,7 +3,7 @@
 Poke server is configured with `poke.yml`. The file defines what commands the
 server can execute and how clients connect to request those commands.
 
-The main configuration blocks are `commands`, `listeners`, and `auth`.
+The main configuration blocks are `commands` and `listeners`.
 
 ## Full Example
 
@@ -19,11 +19,9 @@ listeners:
   http:
     host: 127.0.0.1
     port: 8080
-
-auth:
-  api_token:
-    listeners: [http]
-    token: "my-secret-token"
+    auth:
+      api_token:
+        token: "my-secret-token"
 ```
 
 ## Commands
@@ -48,18 +46,15 @@ listeners:
   http:
     host: 127.0.0.1
     port: 8080
+    auth:
+      api_token:
+        token: "my-secret-token"
 ```
 
 for more information, see [listeners configuration](./listener.md).
 
-## Auth
-
-`auth` configures authentication methods accepted by the server.
-
-For more information, see [auth configuration](./auth.md).
-
 ## Defaults
 
-There are no server-level defaults beyond the presence of `auth`.
-Defaults for command execution and listener settings are documented in their
-respective configuration guides.
+There are no server-level defaults.
+Defaults for command execution and listener settings, including listener auth,
+are documented in their respective configuration guides.

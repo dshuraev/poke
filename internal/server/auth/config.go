@@ -8,7 +8,7 @@ import (
 
 // Auth configures and dispatches authentication validators by auth kind.
 //
-// Configuration is loaded from the top-level `auth` node (see docs/configuration/auth.md).
+// Configuration is loaded from each listener's `auth` node (see docs/configuration/auth.md).
 type Auth struct {
 	Validators map[string]Validator
 }

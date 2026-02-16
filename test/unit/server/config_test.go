@@ -12,10 +12,10 @@ func TestConfigParsePopulatesCommands(t *testing.T) {
 commands:
   uptime: uptime
 listeners:
-  http: {}
-auth:
-  api_token:
-    token: "secret"
+  http:
+    auth:
+      api_token:
+        token: "secret"
 `)
 
 	cfg, err := server.Parse(input)
@@ -35,10 +35,33 @@ auth:
 	}
 }
 
-// TestConfigParseRejectsMissingAuth verifies Parse rejects configs without an auth block.
-func TestConfigParseRejectsMissingAuth(t *testing.T) {
-	if _, err := server.Parse([]byte(`{}`)); err == nil {
-		t.Fatalf("expected error for missing auth block")
+// TestConfigParseRejectsMissingListenerAuth verifies Parse rejects listeners without auth.
+func TestConfigParseRejectsMissingListenerAuth(t *testing.T) {
+	input := []byte(`
+listeners:
+  http: {}
+`)
+
+	if _, err := server.Parse(input); err == nil {
+		t.Fatalf("expected error for missing listener auth block")
+	}
+}
+
+// TestConfigParseRejectsLegacyTopLevelAuth verifies Parse rejects deprecated top-level auth.
+func TestConfigParseRejectsLegacyTopLevelAuth(t *testing.T) {
+	input := []byte(`
+listeners:
+  http:
+    auth:
+      api_token:
+        token: "secret"
+auth:
+  api_token:
+    token: "legacy-secret"
+`)
+
+	if _, err := server.Parse(input); err == nil {
+		t.Fatalf("expected error for deprecated top-level auth block")
 	}
 }
 
@@ -47,9 +70,6 @@ func TestConfigParseRejectsInvalidListener(t *testing.T) {
 	input := []byte(`
 listeners:
   bogus: {}
-auth:
-  api_token:
-    token: "secret"
 `)
 
 	if _, err := server.Parse(input); err == nil {
@@ -64,10 +84,10 @@ commands:
   bad:
     name: "nope"
 listeners:
-  http: {}
-auth:
-  api_token:
-    token: "secret"
+  http:
+    auth:
+      api_token:
+        token: "secret"
 `)
 
 	if _, err := server.Parse(input); err == nil {

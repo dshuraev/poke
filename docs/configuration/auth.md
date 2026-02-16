@@ -1,11 +1,11 @@
 # Auth Spec
 
-Authentication is configured under the top-level `auth` YAML node.
+Authentication is configured under each listener's `auth` YAML node.
 
-`auth` is required in the server config; configs that omit it fail to parse.
+Each configured listener must define `auth` with at least one auth method.
 
-The `auth` node is a map keyed by auth method name. Each configured method is
-validated at load time.
+Each listener's `auth` node is a map keyed by auth method name. Each configured
+method is validated at load time.
 
 ## Minimal Example
 
@@ -14,11 +14,10 @@ commands:
   uptime: uptime
 
 listeners:
-  http: {}
-
-auth:
-  api_token:
-    token: "my-secret-token"
+  http:
+    auth:
+      api_token:
+        token: "my-secret-token"
 ```
 
 ## Methods
@@ -31,35 +30,34 @@ secret.
 #### Example (token literal)
 
 ```yaml
-auth:
-  api_token:
-    listeners: [http]
-    token: "my-secret-token"
+listeners:
+  http:
+    auth:
+      api_token:
+        token: "my-secret-token"
 ```
 
 #### Example (token from environment variable)
 
 ```yaml
-auth:
-  api_token:
-    env: "POKE_API_TOKEN"
+listeners:
+  http:
+    auth:
+      api_token:
+        env: "POKE_API_TOKEN"
 ```
 
 #### Example (token from file)
 
 ```yaml
-auth:
-  api_token:
-    file: "/run/secrets/poke_api_token"
+listeners:
+  http:
+    auth:
+      api_token:
+        file: "/run/secrets/poke_api_token"
 ```
 
 #### Fields
-
-- `listeners` (optional): List of listener types that can accept this auth kind.
-  - Listener types match the keys under the top-level `listeners` node (e.g. `http`).
-  - If omitted or empty, all listener types are allowed.
-  - Values are normalized by trimming whitespace and lowercasing.
-  - Empty values and duplicates are rejected.
 
 Exactly one credential source must be configured:
 
@@ -76,4 +74,3 @@ Exactly one credential source must be configured:
 - Token values are trimmed with `strings.TrimSpace(...)` to avoid common mistakes
   (YAML indentation, trailing newlines in secret files, etc.).
 - Prefer `env` or `file` over `token` so secrets do not live in plaintext configs.
-

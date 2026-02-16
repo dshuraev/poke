@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/goccy/go-yaml"
 )
 
 // APITokenConfig configures API token authentication.
@@ -13,14 +15,7 @@ import (
 // - token: literal token in config
 // - env: environment variable containing the token
 // - file: file path containing the token
-//
-// Listeners, when non-empty, restricts which listener types accept this auth kind.
 type APITokenConfig struct {
-	// Listeners optionally restricts which listener types accept this auth kind.
-	//
-	// Values are normalized via strings.ToLower(strings.TrimSpace(value)).
-	Listeners []string
-
 	token string
 	env   string
 	file  string
@@ -54,20 +49,28 @@ type apiTokenSource struct {
 // indentation, env var values, or trailing newlines in files.
 func (cfg *APITokenConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	type apiTokenConfigInput struct {
-		Listeners []string `yaml:"listeners"`
-		Token     *string  `yaml:"token"`
-		Env       *string  `yaml:"env"`
-		File      *string  `yaml:"file"`
+		Token *string `yaml:"token"`
+		Env   *string `yaml:"env"`
+		File  *string `yaml:"file"`
 	}
 
 	*cfg = APITokenConfig{}
 
-	var in apiTokenConfigInput
-	if err := unmarshal(&in); err != nil {
+	var raw map[string]interface{}
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	if _, hasLegacyListeners := raw["listeners"]; hasLegacyListeners {
+		return fmt.Errorf("api_token listeners is no longer supported; configure auth under listeners.<type>.auth")
+	}
+
+	data, err := yaml.Marshal(raw)
+	if err != nil {
 		return err
 	}
 
-	if err := cfg.setListeners(in.Listeners); err != nil {
+	var in apiTokenConfigInput
+	if err := yaml.Unmarshal(data, &in); err != nil {
 		return err
 	}
 
@@ -82,7 +85,7 @@ func (cfg *APITokenConfig) UnmarshalYAML(unmarshal func(interface{}) error) erro
 	return nil
 }
 
-// Validate checks ctx against the configured API token and listener allow-list.
+// Validate checks ctx against the configured API token.
 func (cfg *APITokenConfig) Validate(ctx *AuthContext) error {
 	if ctx == nil {
 		return fmt.Errorf("auth context is required")
@@ -92,9 +95,6 @@ func (cfg *APITokenConfig) Validate(ctx *AuthContext) error {
 	}
 	if cfg.token == "" {
 		return fmt.Errorf("api_token is not configured")
-	}
-	if !cfg.allowsListenerType(ctx.ListenerType) {
-		return fmt.Errorf("api_token is not enabled for listener %q", ctx.ListenerType)
 	}
 
 	if subtle.ConstantTimeCompare([]byte(cfg.token), []byte(ctx.APIToken)) != 1 {
@@ -225,49 +225,4 @@ func resolveAPITokenFromFile(raw *string) (token string, filePath string, err er
 	}
 
 	return token, filePath, nil
-}
-
-// setListeners normalizes listener types, validates entries, and de-duplicates values.
-func (cfg *APITokenConfig) setListeners(raw []string) error {
-	if len(raw) == 0 {
-		cfg.Listeners = nil
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(raw))
-	out := make([]string, 0, len(raw))
-	for _, v := range raw {
-		normalized := normalizeListenerType(v)
-		if normalized == "" {
-			return fmt.Errorf("api_token listeners must not contain empty entries")
-		}
-		if _, exists := seen[normalized]; exists {
-			return fmt.Errorf("api_token listeners contains duplicate %q", normalized)
-		}
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-
-	cfg.Listeners = out
-	return nil
-}
-
-// normalizeListenerType lowercases and trims a listener type for comparison.
-func normalizeListenerType(value string) string {
-	return strings.ToLower(strings.TrimSpace(value))
-}
-
-// allowsListenerType reports whether the config accepts the given listener type.
-func (cfg *APITokenConfig) allowsListenerType(listenerType string) bool {
-	if len(cfg.Listeners) == 0 {
-		return true
-	}
-
-	normalized := normalizeListenerType(listenerType)
-	for _, allowed := range cfg.Listeners {
-		if allowed == normalized {
-			return true
-		}
-	}
-	return false
 }

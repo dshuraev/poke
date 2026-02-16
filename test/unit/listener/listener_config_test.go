@@ -13,6 +13,9 @@ func TestListenerConfigUnmarshalHTTP(t *testing.T) {
 http:
   host: 127.0.0.1
   port: 9001
+  auth:
+    api_token:
+      token: "secret"
 `)
 
 	var cfg listener.ListenerConfig

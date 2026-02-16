@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"poke/internal/server/auth"
 	"poke/internal/server/request"
 	"strings"
 	"time"
@@ -128,6 +129,7 @@ type HTTPListenerConfig struct {
 	WriteTimeout time.Duration          `yaml:"write_timeout,omitempty"`
 	IdleTimeout  time.Duration          `yaml:"idle_timeout,omitempty"`
 	TLS          *HTTPListenerTLSConfig `yaml:"tls,omitempty"`
+	Auth         *auth.Auth             `yaml:"auth,omitempty"`
 }
 
 const (
@@ -146,6 +148,7 @@ func (cfg *HTTPListenerConfig) UnmarshalYAML(unmarshal func(interface{}) error) 
 		WriteTimeout *time.Duration         `yaml:"write_timeout"`
 		IdleTimeout  *time.Duration         `yaml:"idle_timeout"`
 		TLS          *HTTPListenerTLSConfig `yaml:"tls"`
+		Auth         *auth.Auth             `yaml:"auth"`
 	}
 
 	*cfg = HTTPListenerConfig{
@@ -176,6 +179,9 @@ func (cfg *HTTPListenerConfig) UnmarshalYAML(unmarshal func(interface{}) error) 
 	if in.TLS != nil {
 		cfg.TLS = in.TLS
 	}
+	if in.Auth != nil {
+		cfg.Auth = in.Auth
+	}
 
 	return cfg.validate()
 }
@@ -192,6 +198,12 @@ func (cfg HTTPListenerConfig) validate() error {
 		if err := cfg.TLS.validate(); err != nil {
 			return err
 		}
+	}
+	if cfg.Auth == nil {
+		return fmt.Errorf("auth is required for listener http")
+	}
+	if len(cfg.Auth.Validators) == 0 {
+		return fmt.Errorf("auth must configure at least one method")
 	}
 	return nil
 }

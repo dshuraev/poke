@@ -11,7 +11,11 @@ import (
 
 func TestHTTPListenerConfigDefaults(t *testing.T) {
 	var cfg listener.HTTPListenerConfig
-	if err := yaml.Unmarshal([]byte(`{}`), &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(`
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -30,6 +34,9 @@ func TestHTTPListenerConfigDefaults(t *testing.T) {
 	if cfg.IdleTimeout != 0 {
 		t.Fatalf("idle_timeout: got %v", cfg.IdleTimeout)
 	}
+	if cfg.Auth == nil {
+		t.Fatalf("auth: expected configured auth block")
+	}
 }
 
 func TestHTTPListenerConfigCustomValues(t *testing.T) {
@@ -39,6 +46,9 @@ port: 9000
 read_timeout: 1s
 write_timeout: 2s
 idle_timeout: 3s
+auth:
+  api_token:
+    token: "secret"
 `)
 
 	var cfg listener.HTTPListenerConfig
@@ -65,31 +75,57 @@ idle_timeout: 3s
 
 func TestHTTPListenerConfigRejectsEmptyHost(t *testing.T) {
 	var cfg listener.HTTPListenerConfig
-	if err := yaml.Unmarshal([]byte(`{host: ""}`), &cfg); err == nil {
+	input := []byte(`
+host: ""
+auth:
+  api_token:
+    token: "secret"
+`)
+	if err := yaml.Unmarshal(input, &cfg); err == nil {
 		t.Fatalf("expected error for empty host")
 	}
 }
 
 func TestHTTPListenerConfigRejectsPortOutOfRange(t *testing.T) {
 	var cfg listener.HTTPListenerConfig
-	if err := yaml.Unmarshal([]byte(`{port: 0}`), &cfg); err == nil {
+	if err := yaml.Unmarshal([]byte(`
+port: 0
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err == nil {
 		t.Fatalf("expected error for port below range")
 	}
-	if err := yaml.Unmarshal([]byte(`{port: 70000}`), &cfg); err == nil {
+	if err := yaml.Unmarshal([]byte(`
+port: 70000
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err == nil {
 		t.Fatalf("expected error for port above range")
 	}
 }
 
 func TestHTTPListenerConfigAcceptsPortBounds(t *testing.T) {
 	var cfg listener.HTTPListenerConfig
-	if err := yaml.Unmarshal([]byte(`{port: 1}`), &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(`
+port: 1
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err != nil {
 		t.Fatalf("unmarshal min: %v", err)
 	}
 	if cfg.Port != 1 {
 		t.Fatalf("port min: got %d", cfg.Port)
 	}
 
-	if err := yaml.Unmarshal([]byte(`{port: 65535}`), &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(`
+port: 65535
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err != nil {
 		t.Fatalf("unmarshal max: %v", err)
 	}
 	if cfg.Port != 65535 {
@@ -99,7 +135,58 @@ func TestHTTPListenerConfigAcceptsPortBounds(t *testing.T) {
 
 func TestHTTPListenerConfigRejectsInvalidTimeout(t *testing.T) {
 	var cfg listener.HTTPListenerConfig
-	if err := yaml.Unmarshal([]byte(`{read_timeout: "n/a"}`), &cfg); err == nil {
+	if err := yaml.Unmarshal([]byte(`
+read_timeout: "n/a"
+auth:
+  api_token:
+    token: "secret"
+`), &cfg); err == nil {
 		t.Fatalf("expected error for invalid timeout")
+	}
+}
+
+func TestHTTPListenerConfigParsesAuthAPITokenFromEnv(t *testing.T) {
+	const envName = "POKE_TEST_HTTP_LISTENER_AUTH_TOKEN"
+	const envValue = "from-env"
+	t.Setenv(envName, envValue)
+
+	input := []byte(`
+auth:
+  api_token:
+    env: POKE_TEST_HTTP_LISTENER_AUTH_TOKEN
+`)
+
+	var cfg listener.HTTPListenerConfig
+	if err := yaml.Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if cfg.Auth == nil {
+		t.Fatalf("auth: expected configured auth block")
+	}
+}
+
+func TestHTTPListenerConfigRejectsMissingAuth(t *testing.T) {
+	var cfg listener.HTTPListenerConfig
+	if err := yaml.Unmarshal([]byte(`{}`), &cfg); err == nil {
+		t.Fatalf("expected error for missing auth")
+	}
+}
+
+func TestHTTPListenerConfigRejectsEmptyAuth(t *testing.T) {
+	var cfg listener.HTTPListenerConfig
+	if err := yaml.Unmarshal([]byte(`{auth: {}}`), &cfg); err == nil {
+		t.Fatalf("expected error for empty auth")
+	}
+}
+
+func TestHTTPListenerConfigRejectsUnknownAuthMethod(t *testing.T) {
+	var cfg listener.HTTPListenerConfig
+	input := []byte(`
+auth:
+  unknown: {}
+`)
+	if err := yaml.Unmarshal(input, &cfg); err == nil {
+		t.Fatalf("expected error for unknown auth method")
 	}
 }

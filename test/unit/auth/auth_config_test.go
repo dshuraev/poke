@@ -11,7 +11,6 @@ import (
 func TestAuthUnmarshalAPITokenAndValidate(t *testing.T) {
 	input := []byte(`
 api_token:
-  listeners: [http]
   token: "secret"
 `)
 
